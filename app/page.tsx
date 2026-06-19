@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Navbar from "@/components/Navbar";
 import IdeaForm from "@/components/IdeaForm";
+import EvaluationResultCard from "@/components/EvaluationResult";
 import { EvaluateResponse } from "@/types";
 
 export default function Home() {
@@ -13,29 +14,24 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50">
+    <main className="min-h-screen bg-gradient-to-br from-[#08130d] via-[#10281d] to-[#1a3d2c]">
       <Navbar />
+
       <div className="max-w-4xl mx-auto px-4 py-12">
         <div className="text-center mb-10">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">
+          <h1 className="text-5xl font-bold text-white mb-4">
             Is Your Startup Idea
-            <span className="text-blue-600"> Worth Building?</span>
+            <span className="text-emerald-400"> Worth Building?</span>
           </h1>
-          <p className="text-lg text-gray-500">
+
+          <p className="text-lg text-green-200">
             Get an AI-powered evaluation in seconds.
           </p>
         </div>
+
         <IdeaForm onResult={handleResult} />
-        {result && (
-          <div className="mt-8 bg-white rounded-2xl shadow-xl p-8">
-            <h3 className="text-xl font-bold text-gray-800 mb-4">
-              ✅ Evaluation Complete!
-            </h3>
-            <pre className="text-sm text-gray-600 overflow-auto">
-              {JSON.stringify(result, null, 2)}
-            </pre>
-          </div>
-        )}
+
+        {result && result.data && <EvaluationResultCard result={result.data} />}
       </div>
     </main>
   );
