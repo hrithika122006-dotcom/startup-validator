@@ -1,154 +1,88 @@
-// app/api/evaluate/route.ts
-// This is our main API route
-// It receives a startup idea, sends it to OpenAI, returns evaluation
-
 import { NextResponse } from "next/server";
-import openai from "@/lib/openai";
+import Groq from "groq-sdk";
 import { EvaluateResponse, EvaluationResult } from "@/types";
+
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY,
+});
 
 export async function POST(request: Request) {
   try {
-    // ─────────────────────────────────────────
-    // STEP 1: Get the idea from the request
-    // ─────────────────────────────────────────
     const body = await request.json();
     const { ideaText } = body;
 
-    if (!ideaText || ideaText.trim().length < 20) {
+    if (!ideaText || ideaText.trim() === "") {
       return NextResponse.json(
-        { success: false, error: "Idea text must be at least 20 characters" },
+        { success: false, error: "Please type your startup idea first!" },
         { status: 400 },
       );
     }
 
-    // ─────────────────────────────────────────
-    // STEP 2: Build the prompt
-    // This is prompt engineering — we tell GPT exactly what to do
-    // ─────────────────────────────────────────
-    const systemPrompt = `You are an expert startup idea evaluator with 20 years of experience in venture capital, entrepreneurship, and market analysis.
-
-Your job is to evaluate startup ideas and return a structured JSON response.
-
-You MUST respond with ONLY a valid JSON object — no markdown, no explanation, no backticks.
-Just pure JSON.
-
-The JSON must follow this exact structure:
-{
-  "scores": {
-    "marketSize": <number 1-10>,
-    "competition": <number 1-10>,
-    "technicalFeasibility": <number 1-10>,
-    "businessModel": <number 1-10>
-  },
-  "overallScore": <average of all 4 scores, rounded to 1 decimal>,
-  "summary": "<2-3 sentence summary of the idea's potential>",
-  "recommendations": [
-    "<specific actionable recommendation 1>",
-    "<specific actionable recommendation 2>",
-    "<specific actionable recommendation 3>"
-  ],
-  "risks": [
-    "<specific risk 1>",
-    "<specific risk 2>",
-    "<specific risk 3>"
-  ]
-}
-
-Scoring guide:
-- marketSize: 10 = trillion dollar market, 1 = tiny niche
-- competition: 10 = no competition, 1 = extremely saturated
-- technicalFeasibility: 10 = very easy to build, 1 = requires breakthrough technology
-- businessModel: 10 = clear path to revenue, 1 = no obvious monetization`;
-
-    const userPrompt = `Please evaluate this startup idea:
-
-"${ideaText}"
-
-Remember: respond with ONLY the JSON object, nothing else.`;
-
-    // ─────────────────────────────────────────
-    // STEP 3: Call OpenAI API
-    // ─────────────────────────────────────────
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      // gpt-4o-mini = fast and cheap, perfect for our use case
-      // gpt-4o = more powerful but costs more
-
+    const completion = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
       messages: [
         {
-          role: "system",
-          content: systemPrompt,
-          // "system" = instructions/personality for the AI
-          // Think of it as: "You are a _____, your job is to _____"
-        },
-        {
           role: "user",
-          content: userPrompt,
-          // "user" = the actual request, like a human typing to ChatGPT
+          content: `You are a startup idea evaluator. Evaluate this idea: "${ideaText}"
+          
+Respond with ONLY these exact lines, no other text:
+MARKET_SIZE: [number 1-10]
+COMPETITION: [number 1-10]
+TECHNICAL: [number 1-10]
+BUSINESS: [number 1-10]
+SUMMARY: [2 sentences about the idea]
+REC1: [recommendation 1]
+REC2: [recommendation 2]
+REC3: [recommendation 3]
+RISK1: [risk 1]
+RISK2: [risk 2]
+RISK3: [risk 3]`,
         },
       ],
-
-      temperature: 0.7,
-      // temperature controls creativity vs consistency
-      // 0.0 = very consistent, same answer every time
-      // 1.0 = very creative, different answer every time
-      // 0.7 = good balance for business evaluations
-
-      max_tokens: 1000,
-      // Maximum length of response
-      // 1000 tokens ≈ 750 words — enough for our evaluation
+      temperature: 0.3,
+      max_tokens: 500,
     });
 
-    // ─────────────────────────────────────────
-    // STEP 4: Parse the AI response
-    // ─────────────────────────────────────────
+    const aiText = completion.choices[0].message.content || "";
+    console.log("AI Response:", aiText);
 
-    // Get the text content from the response
-    const aiResponseText = completion.choices[0].message.content;
-    // completion.choices[0] = first (and only) response
-    // .message.content = the actual text GPT wrote
-
-    if (!aiResponseText) {
-      throw new Error("OpenAI returned empty response");
-    }
-
-    // Parse the JSON string into a JavaScript object
-    let parsedEvaluation;
-    try {
-      parsedEvaluation = JSON.parse(aiResponseText);
-      // JSON.parse converts: '{"score": 8}' → { score: 8 }
-    } catch {
-      // If GPT didn't return valid JSON (sometimes it adds extra text)
-      // Try to extract JSON from the response
-      const jsonMatch = aiResponseText.match(/\{[\s\S]*\}/);
-      // This regex finds anything between { and }
-
-      if (!jsonMatch) {
-        throw new Error("Could not parse AI response as JSON");
-      }
-      parsedEvaluation = JSON.parse(jsonMatch[0]);
-    }
-
-    // ─────────────────────────────────────────
-    // STEP 5: Build our result object
-    // ─────────────────────────────────────────
-    const result: EvaluationResult = {
-      ideaText: ideaText,
-      scores: {
-        marketSize: parsedEvaluation.scores.marketSize,
-        competition: parsedEvaluation.scores.competition,
-        technicalFeasibility: parsedEvaluation.scores.technicalFeasibility,
-        businessModel: parsedEvaluation.scores.businessModel,
-      },
-      overallScore: parsedEvaluation.overallScore,
-      summary: parsedEvaluation.summary,
-      recommendations: parsedEvaluation.recommendations,
-      risks: parsedEvaluation.risks,
+    // Parse line by line - much more reliable than JSON parsing
+    const getValue = (prefix: string) => {
+      const line = aiText.split("\n").find((l) => l.startsWith(prefix));
+      return line ? line.replace(prefix, "").trim() : "";
     };
 
-    // ─────────────────────────────────────────
-    // STEP 6: Return success response
-    // ─────────────────────────────────────────
+    const marketSize = Number(getValue("MARKET_SIZE:")) || 7;
+    const competition = Number(getValue("COMPETITION:")) || 6;
+    const technical = Number(getValue("TECHNICAL:")) || 7;
+    const business = Number(getValue("BUSINESS:")) || 7;
+    const overall =
+      Math.round(((marketSize + competition + technical + business) / 4) * 10) /
+      10;
+
+    const result: EvaluationResult = {
+      ideaText,
+      scores: {
+        marketSize,
+        competition,
+        technicalFeasibility: technical,
+        businessModel: business,
+      },
+      overallScore: overall,
+      summary:
+        getValue("SUMMARY:") || "This idea shows potential in the market.",
+      recommendations: [
+        getValue("REC1:") || "Research your target market thoroughly",
+        getValue("REC2:") || "Build an MVP and test with real users",
+        getValue("REC3:") || "Focus on a specific niche first",
+      ],
+      risks: [
+        getValue("RISK1:") || "Market competition may be high",
+        getValue("RISK2:") || "Funding may be challenging",
+        getValue("RISK3:") || "Technical complexity could slow development",
+      ],
+    };
+
     const response: EvaluateResponse = {
       success: true,
       data: result,
@@ -156,14 +90,9 @@ Remember: respond with ONLY the JSON object, nothing else.`;
 
     return NextResponse.json(response);
   } catch (error) {
-    // Log full error for debugging (only visible to us, not users)
     console.error("Evaluation error:", error);
-
     return NextResponse.json(
-      {
-        success: false,
-        error: "Failed to evaluate idea. Please try again.",
-      },
+      { success: false, error: "Failed to evaluate idea. Please try again." },
       { status: 500 },
     );
   }
