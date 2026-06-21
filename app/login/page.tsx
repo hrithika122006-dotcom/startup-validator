@@ -27,7 +27,7 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/");
+    router.push("/validate");
     router.refresh();
   }
 
@@ -35,6 +35,7 @@ export default function LoginPage() {
     <main className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
       <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
         <h1 className="text-2xl font-bold text-gray-800 mb-6">Log In</h1>
+
         <input
           type="email"
           placeholder="Email"
@@ -45,18 +46,18 @@ export default function LoginPage() {
 
         <input
           type="password"
-          placeholder="Password (min 6 characters)"
+          placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           className="w-full border border-gray-200 rounded-xl p-3 mb-3 text-gray-900"
         />
+
         {error && <p className="text-red-500 text-sm mb-3">{error}</p>}
 
         <button
           onClick={handleLogin}
           disabled={isLoading}
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white 
-                     font-semibold py-3 rounded-xl transition-all"
+          className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-xl transition-all"
         >
           {isLoading ? "Logging in..." : "Log In"}
         </button>
